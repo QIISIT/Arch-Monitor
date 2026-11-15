@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="160" viewBox="0 0 800 160" role="img" aria-label="Arch Monitor">
+  <rect x="12" y="16" width="128" height="128" rx="30" fill="#0d1218"/>
+  <g transform="translate(12 16) scale(.5)">
+    <rect x="44" y="120" width="32" height="92" rx="8" fill="#1793D1"/>
+    <rect x="92" y="72" width="32" height="140" rx="8" fill="#1793D1"/>
+    <rect x="140" y="100" width="32" height="112" rx="8" fill="#1793D1"/>
+    <rect x="188" y="148" width="24" height="64" rx="8" fill="#e5c07b"/>
+    <rect x="44" y="44" width="168" height="8" rx="4" fill="#232d39"/>
+  </g>
+  <text x="172" y="88" fill="#17212C" font-family="DejaVu Sans, sans-serif" font-size="64" font-weight="700">Arch Monitor</text>
+  <text x="176" y="124" fill="#1793D1" font-family="DejaVu Sans, sans-serif" font-size="16" letter-spacing="3">SYSTEM MONITOR FOR ARCH LINUX</text>
+</svg>
