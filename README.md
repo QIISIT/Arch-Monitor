@@ -10,7 +10,7 @@
 
 [![platform](https://img.shields.io/badge/platform-Arch%20Linux-0a7bbb)](#скачать-и-установить)
 [![python](https://img.shields.io/badge/Python-3-3776ab)](docs/DEVELOPMENT.md)
-[![license](https://img.shields.io/badge/license-PolyForm%20NC%201.0-8957e5)](LICENSE.md)
+[![license](https://img.shields.io/badge/license-GPL%203.0-8957e5)](LICENSE.md)
 [![issues](https://img.shields.io/github/issues/QIISIT/Arch-Monitor?color=d4a72c)](https://github.com/QIISIT/Arch-Monitor/issues)
 
 </div>
@@ -86,12 +86,15 @@ bash install-archmon.sh --remove
 
 ## Лицензия
 
-© 2026 Qisit. Код Arch Monitor — под [PolyForm Noncommercial 1.0.0](LICENSE.md),
-как и AutoQ: использование и изменения разрешены для некоммерческих целей
-на условиях полного текста лицензии. Коммерческое использование требует отдельного разрешения автора.
+© 2026 Qisit. Arch Monitor распространяется под
+[GNU General Public License v3.0](LICENSE.md) (**GPL-3.0-only**).
+Разрешены использование, изменение и распространение, включая коммерческое,
+при соблюдении GPLv3. При распространении программы и производных версий
+сохраняйте предусмотренные лицензией права получателей и предоставляйте
+соответствующие исходники согласно её условиям.
 
-У зависимостей свои лицензии. **Для текущей версии на PyQt6 вопрос распространения
-под PolyForm требует решения до релиза**: см. [THIRD-PARTY.md](THIRD-PARTY.md).
+Программа предоставляется без гарантий. У зависимостей свои лицензии:
+см. [THIRD-PARTY.md](THIRD-PARTY.md).
 
 ---
 
@@ -99,4 +102,4 @@ bash install-archmon.sh --remove
 and Wayland. It includes processes, CPU and GPU statistics, disks, motherboard fan control,
 MangoHud settings and Reflector integration. English UI, six themes and a system tray.
 See the [installer](install-archmon.sh), [development guide](docs/DEVELOPMENT.md)
-and [dependency licensing notes](THIRD-PARTY.md).
+and [dependency licensing notes](THIRD-PARTY.md). Licensed under GNU GPL v3.0 only.

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 Qisit. Full license text is included in the embedded archive.
 # Arch Monitor installer. Usage: bash install-archmon.sh   (remove: bash install-archmon.sh --remove)
 set -euo pipefail
 APP=archmon
