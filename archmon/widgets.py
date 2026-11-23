@@ -1,8 +1,8 @@
-"""Свои виджеты: кольцо Ring, полоса Meter, карточка видеокарты GpuCard, кнопки меню и подсказок."""
+"""Свои виджеты: сводный показатель, полосы, секция видеокарты, кнопки меню и подсказок."""
 from PyQt6.QtCore import QByteArray, QRectF, QSize, Qt
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QStyle, QStyledItemDelegate,
-                             QStyleOptionViewItem, QWidget)
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+                             QVBoxLayout, QWidget)
 
 try:                                   # значки меню рисуются из SVG; без модуля QtSvg меню просто без значков
     from PyQt6.QtSvg import QSvgRenderer
@@ -11,18 +11,25 @@ except ImportError:
 
 from . import config as C
 from .gpu import Gpu
-from .helpers import human_bytes, program_initial
+from .helpers import human_bytes
 from .theme import T
 
 ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 ALIGN_RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 
 
-def make_card():
-    """Пустая рамка-карточка (стиль QFrame#card задан в style.py)."""
+def make_section():
+    """Секция на общем фоне, отделённая сверху линией."""
     frame = QFrame()
-    frame.setObjectName("card")
+    frame.setObjectName("section")
     return frame
+
+
+def divider():
+    line = QFrame()
+    line.setObjectName("divider")
+    line.setFixedHeight(1)
+    return line
 
 
 def dim_label(text):
@@ -33,7 +40,7 @@ def dim_label(text):
 
 
 class HintButton(QPushButton):
-    """Плашка-подсказка внизу окна («F3 Search»): «таблетка» с клавишей цвета акцента, нажимается мышью."""
+    """Кликабельная подсказка горячей клавиши внизу окна."""
 
     def __init__(self, key, name, tooltip=""):
         super().__init__()
@@ -94,7 +101,7 @@ class NavButton(QPushButton):
         self.setObjectName("nav")
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(44)
+        self.setFixedHeight(37)
         self.setIconSize(QSize(18, 18))
         self.refresh()
 
@@ -107,133 +114,58 @@ class NavButton(QPushButton):
 
 
 def logo_pixmap(size=30):
-    """Логотип: круг цвета акцента с тремя столбиками."""
+    """Логотип: три столбика цвета акцента на квадратном фоне."""
     pm = QPixmap(size * 2, size * 2)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.scale(2 * size / 30, 2 * size / 30)
     p.setPen(Qt.PenStyle.NoPen)
+    p.fillRect(QRectF(0, 0, 30, 30), QColor(T.selection))
     p.setBrush(QColor(T.accent))
-    p.drawEllipse(QRectF(0, 0, 30, 30))
-    p.setBrush(QColor(T.bg))
     for x, y, h in ((8, 14, 8), (13.25, 9, 13), (18.5, 12, 10)):
-        p.drawRoundedRect(QRectF(x, y, 3.5, h), 1.75, 1.75)
+        p.drawRect(QRectF(x, y, 3.5, h))
     p.end()
     pm.setDevicePixelRatio(2)
     return pm
 
 
-class Ring(QWidget):
-    """Круговой индикатор: дуга заполнения, число в центре, единица под ним и подпись снизу.
+class Metric(QFrame):
+    """Сводный показатель: название, число, пояснение и тонкая шкала."""
 
-    size   диаметр, px
-    warm   True: дуга цвета предупреждения (для температур), иначе цвета акцента
-    mini   маленькое кольцо ядра: только число моноширинным шрифтом
-    """
-
-    def __init__(self, label="", size=112, warm=False, mini=False):
+    def __init__(self, title, last=False):
         super().__init__()
-        self.label, self.size, self.warm, self.mini = label, size, warm, mini
-        self.thickness = max(4, round(size * 0.095))
-        self.pct, self.value, self.unit = 0.0, "", ""
-        self.label_h = 0 if (mini or not label) else 26
-        self.setFixedSize(max(size, 96 if self.label_h else size), size + self.label_h)
+        self.setObjectName("metric")
+        self.setProperty("last", last)
+        box = QVBoxLayout(self)
+        box.setContentsMargins(0, 0, 0 if last else 16, 0)
+        box.setSpacing(4)
+        title_label = QLabel(title)
+        title_label.setObjectName("metricTitle")
+        box.addWidget(title_label)
+        box.addSpacing(4)
+        self.value = QLabel("—")
+        self.value.setObjectName("metricValue")
+        box.addWidget(self.value)
+        self.detail = dim_label("")
+        self.detail.setTextFormat(Qt.TextFormat.PlainText)
+        self.detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.detail.setFixedHeight(self.detail.sizeHint().height())
+        box.addWidget(self.detail)
+        box.addSpacing(4)
+        self.meter = Meter("", lw=0, tw=0, heat=False, compact=True)
+        self.meter.setFixedHeight(5)
+        box.addWidget(self.meter)
 
-    def set(self, pct, value, unit=""):
-        self.pct = max(0.0, min(100.0, pct))
-        self.value, self.unit = value, unit
-        self.update()
+    def set(self, percent, value, detail=None):
+        self.meter.set(percent, "")
+        self.value.setText(value)
+        if detail is not None:
+            self.set_detail(detail)
 
-    def paintEvent(self, _event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        d, t = self.size, self.thickness
-        x0 = (self.width() - d) / 2
-        rect = QRectF(x0 + t / 2, t / 2, d - t, d - t)
-
-        pen = QPen(QColor(T.line), t)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(pen)
-        p.drawEllipse(rect)
-        if self.pct > 0:
-            pen.setColor(QColor(T.amber if self.warm else T.accent))
-            p.setPen(pen)
-            p.drawArc(rect, 90 * 16, -round(max(self.pct, 1.5) / 100 * 360 * 16))   # по часовой от верха
-
-        box = QRectF(x0, 0, d, d)
-        font = QFont(self.font())
-        p.setPen(QColor(T.text))
-        if self.mini:
-            font.setFamilies(C.MONO_FONTS)
-            font.setPixelSize(max(8, round(d * 0.27)))
-            p.setFont(font)
-            p.drawText(box, Qt.AlignmentFlag.AlignCenter, self.value)
-            return
-        font.setBold(True)
-        font.setPixelSize(round(d * 0.22))
-        p.setFont(font)
-        if self.unit:
-            p.drawText(QRectF(x0, 0, d, d * 0.56), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, self.value)
-            small = QFont(self.font())
-            small.setPixelSize(max(9, round(d * 0.1)))
-            p.setFont(small)
-            p.setPen(QColor(T.dim))
-            p.drawText(QRectF(x0, d * 0.58, d, d * 0.3), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self.unit)
-        else:
-            p.drawText(box, Qt.AlignmentFlag.AlignCenter, self.value)
-        if self.label_h:
-            lab = QFont(self.font())
-            lab.setBold(True)
-            lab.setPixelSize(13)
-            p.setFont(lab)
-            p.setPen(QColor(T.text))
-            p.drawText(QRectF(0, d, self.width(), self.label_h), Qt.AlignmentFlag.AlignCenter, self.label)
-
-
-class CommandDelegate(QStyledItemDelegate):
-    """Колонка Command в обычном режиме: круглый значок с первой буквой программы перед командой.
-
-    В режиме дерева и на строке-разделителе рисует как обычно (там в тексте линии дерева).
-    owner: главное окно (берём из него tree_mode и номер строки-разделителя).
-    """
-
-    DOT = 22
-
-    def __init__(self, owner):
-        super().__init__(owner)
-        self.owner = owner
-
-    def paint(self, painter, option, index):
-        if self.owner.tree_mode or index.row() == self.owner._sep_row:
-            super().paint(painter, option, index)
-            return
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-        text, opt.text = opt.text, ""
-        widget = opt.widget
-        widget.style().drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, widget)   # фон и выделение
-
-        r, d = option.rect, self.DOT
-        circle = QRectF(r.left() + 6, r.center().y() - d / 2 + 0.5, d, d)
-        fg = index.data(Qt.ItemDataRole.ForegroundRole)
-        fg = fg.color() if fg is not None else QColor(T.text)
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(T.raised))
-        painter.drawEllipse(circle)
-        font = QFont(opt.font)
-        font.setBold(True)
-        font.setPixelSize(11)
-        painter.setFont(font)
-        painter.setPen(fg)
-        painter.drawText(circle, Qt.AlignmentFlag.AlignCenter, program_initial(text))
-        painter.setFont(opt.font)
-        text_rect = r.adjusted(6 + d + 8, 0, -6, 0)
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                         painter.fontMetrics().elidedText(text, Qt.TextElideMode.ElideRight, text_rect.width()))
-        painter.restore()
+    def set_detail(self, text):
+        self.detail.setText(text)
+        self.detail.setToolTip(text)
 
 
 class Meter(QWidget):
@@ -245,12 +177,18 @@ class Meter(QWidget):
     heat   True: цвет меняется с ростом (синий, жёлтый, красный); False: всегда синий
     """
 
-    def __init__(self, label, lw=34, tw=52, heat=True):
+    def __init__(self, label, lw=34, tw=52, heat=True, compact=False):
         super().__init__()
         self.label, self.lw, self.tw, self.heat = label, lw, tw, heat
         self.pct, self.text = 0.0, "0%"
-        self.setFixedHeight(24)
-        self.setMinimumWidth(140)
+        self.compact = compact
+        self.setFixedHeight(20 if compact else 24)
+        if compact:
+            font = QFont(self.font())
+            font.setFamilies(C.MONO_FONTS)
+            font.setPixelSize(11)
+            self.setFont(font)
+        self.setMinimumWidth(lw + tw + 25 if compact else 140)
 
     def set(self, pct, text=None):
         """pct: заполнение 0..100; text: значение справа (по умолчанию процент)."""
@@ -267,26 +205,28 @@ class Meter(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
-        bar_w = w - self.lw - self.tw - 8
-        bar = QRectF(self.lw, h / 2 - 3, bar_w, 6)
+        space = 5 if self.tw else 0
+        bar_w = max(0, w - self.lw - self.tw - space)
+        thickness = 3 if self.compact else 4
+        bar = QRectF(self.lw, (h - thickness) / 2, bar_w, thickness)
 
         p.setPen(QColor(T.dim))
         p.drawText(QRectF(0, 0, self.lw, h), ALIGN_LEFT, self.label)
 
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(T.line))
-        p.drawRoundedRect(bar, 3, 3)                       # пустая дорожка
+        p.drawRect(bar)
         if self.pct > 0:
-            filled = QRectF(bar.x(), bar.y(), max(6.0, bar_w * self.pct / 100), bar.height())
+            filled = QRectF(bar.x(), bar.y(), min(bar_w, max(1.0, bar_w * self.pct / 100)), bar.height())
             p.setBrush(QColor(self._fill_color()))
-            p.drawRoundedRect(filled, 3, 3)                # заполненная часть
+            p.drawRect(filled)
 
         p.setPen(QColor(T.text))
         p.drawText(QRectF(w - self.tw, 0, self.tw, h), ALIGN_RIGHT, self.text)
 
 
-class GpuCard(QFrame):
-    """Карточка одной видеокарты: две колонки полос.
+class GpuSection(QFrame):
+    """Секция одной видеокарты: две колонки полос.
 
     Слева:  GPU, VRAM, Temp, Fan.   Справа: Core clk, Mem clk, Power, Volt.
     Чтобы добавить показатель, создай Meter в __init__, положи в сетку и заполни в show_gpu().
@@ -294,16 +234,17 @@ class GpuCard(QFrame):
 
     def __init__(self, tag):
         super().__init__()
-        self.setObjectName("card")
+        self.setObjectName("section")
         self.tag = tag
         self._peak = {}   # максимумы, которые видели сами (если драйвер не сообщает предел)
 
         grid = QGridLayout(self)
-        grid.setContentsMargins(16, 12, 16, 12)
+        grid.setContentsMargins(0, 12, 0, 12)
         grid.setHorizontalSpacing(22)
         grid.setVerticalSpacing(2)
 
-        self.title = dim_label(tag)
+        self.title = QLabel(tag)
+        self.title.setObjectName("strong")
         grid.addWidget(self.title, 0, 0, 1, 2)
 
         self.util = Meter("GPU", 44, 52)

@@ -13,7 +13,7 @@ from . import config as C
 from . import fan_service
 from . import fand
 from . import fans
-from .widgets import Meter, dim_label, make_card
+from .widgets import Meter, dim_label, make_section
 
 MODE_LABELS = ["BIOS control", "Curve · Silent", "Curve · Balanced", "Curve · Performance", "Fixed speed"]   # порядок как fan_service.MODES
 SOURCE_LABELS = ["CPU", "GPU", "Hottest"]                                              # порядок как fan_service.SOURCES
@@ -96,9 +96,9 @@ class FansPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(12)
 
-        head_card = make_card()
-        head = QHBoxLayout(head_card)
-        head.setContentsMargins(22, 14, 22, 14)
+        header_section = make_section()
+        head = QHBoxLayout(header_section)
+        head.setContentsMargins(0, 14, 0, 14)
         title = QLabel("Motherboard fans")
         title.setObjectName("strong")
         vendor, name = fans.board()
@@ -119,12 +119,12 @@ class FansPage(QWidget):
         head.addStretch()
         for button in (rescan, self.bios_button, self.apply_button):
             head.addWidget(button)
-        root.addWidget(head_card)
+        root.addWidget(header_section)
 
         # что делать, если вентиляторов не видно
-        self.help = make_card()
+        self.help = make_section()
         help_box = QVBoxLayout(self.help)
-        help_box.setContentsMargins(22, 16, 22, 18)
+        help_box.setContentsMargins(0, 16, 0, 18)
         help_box.setSpacing(10)
         self.help_text = QLabel()
         self.help_text.setWordWrap(True)
@@ -141,9 +141,9 @@ class FansPage(QWidget):
         root.addWidget(self.help)
 
         # вентиляторы
-        self.fans_card = make_card()
-        fans_box = QVBoxLayout(self.fans_card)
-        fans_box.setContentsMargins(22, 14, 22, 16)
+        self.fans_section = make_section()
+        fans_box = QVBoxLayout(self.fans_section)
+        fans_box.setContentsMargins(0, 14, 0, 16)
         fans_box.setSpacing(10)
         self.grid = QGridLayout()
         self.grid.setHorizontalSpacing(14)
@@ -156,16 +156,18 @@ class FansPage(QWidget):
         hint.setWordWrap(True)
         fans_box.addWidget(hint)
         fans_box.addLayout(self.grid)
-        root.addWidget(self.fans_card)
+        root.addWidget(self.fans_section)
 
         # кривые (общие для всех вентиляторов с этим режимом)
-        self.curves_card = make_card()
-        curves = QGridLayout(self.curves_card)
-        curves.setContentsMargins(22, 14, 22, 16)
+        self.curves_section = make_section()
+        curves = QGridLayout(self.curves_section)
+        curves.setContentsMargins(0, 14, 0, 16)
         curves.setHorizontalSpacing(10)
         curves.setVerticalSpacing(8)
-        curves.addWidget(dim_label("Curves: below the first temperature the fan runs at the first speed, "
-                                   "above the second at the second speed, smoothly in between."), 0, 0, 1, 9)
+        curves_hint = dim_label("Curves: below the first temperature the fan runs at the first speed, "
+                                "above the second at the second speed, smoothly in between.")
+        curves_hint.setWordWrap(True)
+        curves.addWidget(curves_hint, 0, 0, 1, 9)
         saved_curves = saved.get("curves", {})
         self.curve_spins = {}
         for r, name in enumerate(CURVE_NAMES, start=1):
@@ -186,12 +188,14 @@ class FansPage(QWidget):
                 curves.addWidget(spin, r, 2 + c * 2)
             self.curve_spins[name] = spins
         curves.setColumnStretch(9, 1)
-        root.addWidget(self.curves_card)
+        root.addWidget(self.curves_section)
 
-        root.addWidget(dim_label(
+        safety_note = dim_label(
             f"Safety: speeds never go below {fand.MIN_PCT}%. If the CPU reaches {fand.EMERGENCY_CPU}°C or the GPU "
             f"{fand.EMERGENCY_GPU}°C, all fans go to 100%. If the service stops, fans return to the BIOS curves. "
-            "Nothing is written to the BIOS itself. Graphics card fans stay with the NVIDIA driver."))
+            "Nothing is written to the BIOS itself. Graphics card fans stay with the NVIDIA driver.")
+        safety_note.setWordWrap(True)
+        root.addWidget(safety_note)
         root.addStretch()
         self.refresh(full=True)
 
@@ -201,8 +205,8 @@ class FansPage(QWidget):
         found = fans.read_fans()
         controllable = [f for f in found if f.pwm is not None]
         self.help.setVisible(not controllable)
-        self.fans_card.setVisible(bool(controllable))
-        self.curves_card.setVisible(bool(controllable))
+        self.fans_section.setVisible(bool(controllable))
+        self.curves_section.setVisible(bool(controllable))
         self.apply_button.setEnabled(bool(controllable) and self.process is None)
         if not controllable:
             text, code = fans.driver_steps()

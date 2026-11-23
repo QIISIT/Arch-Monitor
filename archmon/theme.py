@@ -15,7 +15,7 @@ class Theme:
     name: str
     accent: str       # главный цвет: заполнение полос, рамка в фокусе, плашки клавиш
     bg: str           # фон окна
-    card: str         # фон карточек и таблицы
+    card: str         # фон полей и заголовков таблицы
     line: str         # линии и пустая часть полос
     text: str         # основной текст
     dim: str          # приглушённый текст
@@ -25,7 +25,7 @@ class Theme:
 
 
 THEMES = {t.name: t for t in [
-    Theme("Graphite",   "#38BDF8", "#0F1113", "#171A1E", "#262B31", "#ECEFF3", "#9AA3AE", "#F5A524", "#F59E9E", "#1B3140"),
+    Theme("Graphite",   "#61CAF2", "#10151D", "#191F2A", "#2A3443", "#E4EBF5", "#A6B3C4", "#EFC27B", "#ED9BA6", "#1C3241"),
     Theme("Arch",       "#1793D1", "#0d1218", "#141b23", "#232d39", "#d5dde6", "#7d8a98", "#e5c07b", "#e5646f", "#1b4a6b"),
     Theme("Nord",       "#88c0d0", "#242933", "#2e3440", "#3b4252", "#d8dee9", "#7b88a1", "#ebcb8b", "#bf616a", "#434c5e"),
     Theme("Gruvbox",    "#83a598", "#1d2021", "#282828", "#3c3836", "#ebdbb2", "#928374", "#fabd2f", "#fb4934", "#504945"),
@@ -48,7 +48,7 @@ def set_theme(name):
     theme = THEMES.get(name) or THEMES[C.DEFAULT_THEME]
     T.__dict__.update(asdict(theme))
     T.side = mix(theme.bg, theme.card, 0.5)      # фон бокового меню
-    T.raised = mix(theme.card, theme.line, 0.5)  # кнопки внутри карточек, наведение в меню
+    T.raised = mix(theme.card, theme.line, 0.5)  # наведение и вторичные поверхности
 
 
 set_theme(C.DEFAULT_THEME)

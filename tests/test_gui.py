@@ -102,35 +102,35 @@ class WindowTests(unittest.TestCase):
 
     def test_gpu_appears_after_empty_start_and_recovers_again(self):
         self.w._receive_gpus([])
-        self.assertFalse(self.w.gpu_cards)
-        self.assertTrue(self.w.gpu_ring.isHidden())
+        self.assertFalse(self.w.gpu_sections)
+        self.assertTrue(self.w.gpu_metric.isHidden())
         self.w._receive_gpus([GPU])
-        self.assertIn('nv0', self.w.gpu_cards)
-        self.assertFalse(self.w.gpu_ring.isHidden())
+        self.assertIn('nv0', self.w.gpu_sections)
+        self.assertFalse(self.w.gpu_metric.isHidden())
         gpu_button = dict(self.w.nav_buttons)[window.NAV_INDEX['GPU']]
         self.assertFalse(gpu_button.isHidden())
-        card = self.w.gpu_cards['nv0']
+        section = self.w.gpu_sections['nv0']
         self.w._receive_gpus([])
-        self.assertIn('Retrying', card.toolTip())
+        self.assertIn('Retrying', section.toolTip())
         self.w._receive_gpus([GPU])
-        self.assertIs(card, self.w.gpu_cards['nv0'])
-        self.assertEqual(card.toolTip(), '')
+        self.assertIs(section, self.w.gpu_sections['nv0'])
+        self.assertEqual(section.toolTip(), '')
         self.assertEqual(self.w.gpu_name.text(), GPU.name)
 
     def test_missing_vram_value_does_not_crash(self):
         missing = Gpu('nv0', GPU.name, 2, '2%', vram_total=12e9, vram_used=None)
         self.w._receive_gpus([missing])
-        self.assertIn('nv0', self.w.gpu_cards)
-        self.assertFalse(self.w.vram_ring.isHidden())
+        self.assertIn('nv0', self.w.gpu_sections)
+        self.assertFalse(self.w.vram_metric.isHidden())
 
     def test_freeze_defers_render_until_unfrozen(self):
         self.w._frozen = True
         self.w._receive_gpus([GPU])
-        self.assertFalse(self.w.gpu_cards)
+        self.assertFalse(self.w.gpu_sections)
         self.w._frozen = False
         with patch.object(self.w.gpu_poller, 'request'):
             self.w.update_gpus()
-        self.assertIn('nv0', self.w.gpu_cards)
+        self.assertIn('nv0', self.w.gpu_sections)
 
     def test_bad_mangohud_values_do_not_crash_window(self):
         self.w.mango.cfg.values.update(font_size='bad', alpha='nan', background_alpha='inf', log_interval='-10')

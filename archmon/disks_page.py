@@ -1,23 +1,23 @@
-"""Страница Disks: карточка на каждый диск (скорость, загрузка, температура) и его разделы."""
+"""Страница Disks: секция на каждый диск (скорость, загрузка, температура) и его разделы."""
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from . import disks
 from .helpers import human_bytes
-from .widgets import Meter, dim_label, make_card
+from .widgets import Meter, dim_label, make_section
 
 
 def rate_text(bytes_per_s):
     return f"{human_bytes(bytes_per_s)}/s" if bytes_per_s >= 1024 else "0 B/s"
 
 
-class DiskCard:
-    """Карточка одного диска. Виджеты создаются один раз, show() только обновляет значения."""
+class DiskSection:
+    """Секция одного диска. Виджеты создаются один раз, show() только обновляет значения."""
 
     def __init__(self, disk):
-        self.card = make_card()
-        box = QVBoxLayout(self.card)
-        box.setContentsMargins(22, 16, 22, 16)
+        self.section = make_section()
+        box = QVBoxLayout(self.section)
+        box.setContentsMargins(0, 16, 0, 16)
         box.setSpacing(12)
 
         head = QHBoxLayout()
@@ -92,7 +92,7 @@ class DisksPage(QWidget):
         super().__init__()
         self.sampler = sampler
         self.signature = None
-        self.cards = {}
+        self.sections = {}
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -114,18 +114,18 @@ class DisksPage(QWidget):
             self._rebuild(found)
             self.signature = signature
         for d in found:
-            self.cards[d.name].show(d, self.sampler.rates.get(d.name), self.sampler.totals.get(d.name))
+            self.sections[d.name].show(d, self.sampler.rates.get(d.name), self.sampler.totals.get(d.name))
 
     def _rebuild(self, found):
         while self.box.count():
             item = self.box.takeAt(0)
             if item.widget() is not None and item.widget() is not self.note:
                 item.widget().deleteLater()
-        self.cards = {}
+        self.sections = {}
         for d in found:
-            card = DiskCard(d)
-            self.cards[d.name] = card
-            self.box.addWidget(card.card)
+            section = DiskSection(d)
+            self.sections[d.name] = section
+            self.box.addWidget(section.section)
         if not found:
             self.box.addWidget(dim_label("No disks found."))
         self.box.addWidget(self.note)

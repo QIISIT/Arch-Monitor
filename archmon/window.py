@@ -35,8 +35,8 @@ from .style import build_qss
 from .theme import THEMES, T, set_theme
 from .tray import TrayIcon
 from .tree import tree_nodes, visible_nodes
-from .widgets import (ALIGN_LEFT, ALIGN_RIGHT, CommandDelegate, GpuCard, HintButton, Meter, NavButton, Ring,
-                      dim_label, logo_pixmap, make_card)
+from .widgets import (ALIGN_LEFT, ALIGN_RIGHT, GpuSection, HintButton, Meter, Metric, NavButton,
+                      dim_label, divider, logo_pixmap, make_section)
 
 PID_COL = next(i for i, c in enumerate(COLUMNS) if c.key == "pid")   # колонка с PID (нужна для выделения)
 SEARCH_COLS = [i for i, c in enumerate(COLUMNS) if c.key in C.SEARCH_KEYS]
@@ -52,7 +52,7 @@ class Row(NamedTuple):
     node: object = None   # TreeNode в режиме дерева, иначе None
 
 
-# Пункты бокового меню: (подпись, номер страницы, показывать ли плитки сводки, значок — контур SVG 24×24)
+# Пункты бокового меню: (подпись, номер страницы, показывать ли сводку, значок — контур SVG 24×24)
 NAV_ITEMS = [
     ("Overview", 0, True, "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"),
     ("Processes", 0, False, "M4 6h16M4 12h16M4 18h10"),
@@ -116,6 +116,7 @@ class MainWindow(QWidget):
                      self._build_disks_page()):
             self.pages.addWidget(page)
         layout.addWidget(self.pages, 1)
+        layout.addWidget(divider())
         layout.addLayout(self._build_footer())
         root.addWidget(main, 1)
         self.go_to(0)
@@ -140,11 +141,11 @@ class MainWindow(QWidget):
         side.setObjectName("side")
         side.setFixedWidth(C.SIDEBAR_WIDTH)
         box = QVBoxLayout(side)
-        box.setContentsMargins(12, 20, 12, 16)
-        box.setSpacing(4)
+        box.setContentsMargins(0, 20, 0, 16)
+        box.setSpacing(2)
 
         brand = QHBoxLayout()
-        brand.setContentsMargins(10, 0, 0, 16)
+        brand.setContentsMargins(20, 0, 10, 14)
         brand.setSpacing(10)
         self.logo = QLabel()
         self.logo.setFixedSize(30, 30)
@@ -157,7 +158,13 @@ class MainWindow(QWidget):
         box.addLayout(brand)
 
         self.nav_buttons = []
-        for i, (label, page, _tiles, icon) in enumerate(NAV_ITEMS):
+        for i, (label, _page, _summary, icon) in enumerate(NAV_ITEMS):
+            group = {"Overview": "MONITOR", "MangoHud": "TOOLS"}.get(label)
+            if group:
+                heading = QLabel(group)
+                heading.setObjectName("navGroup")
+                box.addSpacing(8)
+                box.addWidget(heading)
             button = NavButton(label, icon)
             if label == "GPU":
                 button.setVisible(False)   # появится после успешного фонового опроса
@@ -170,155 +177,148 @@ class MainWindow(QWidget):
         host.setObjectName("strong")
         self.side_reflector = dim_label("")
         info = QVBoxLayout()
-        info.setContentsMargins(14, 12, 14, 0)
+        info.setContentsMargins(20, 12, 12, 0)
         info.setSpacing(2)
         info.addWidget(host)
         info.addWidget(dim_label(f"Linux {platform.release()}"))
         info.addWidget(self.side_reflector)
+        box.addWidget(divider())
         box.addLayout(info)
         self._update_side_reflector()
         return side
 
     def _build_header(self):
         row = QHBoxLayout()
-        row.setSpacing(14)
+        row.setSpacing(10)
+        titles = QVBoxLayout()
+        titles.setSpacing(2)
         self.page_title = QLabel("Overview")
         self.page_title.setObjectName("title")
-        self.info_label = dim_label("")   # «up 00:15:08 · 421 tasks · 1 running»
+        self.info_label = dim_label("")
+        titles.addWidget(self.page_title)
+        titles.addWidget(self.info_label)
+        row.addLayout(titles, 1)
+        row.addWidget(dim_label("Theme"))
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(list(THEMES))
         self.theme_combo.setCurrentText(T.name)
         self.theme_combo.setToolTip("Color theme")
         self.theme_combo.currentTextChanged.connect(self.apply_theme)
-        row.addWidget(self.page_title)
-        row.addWidget(self.info_label)
-        row.addStretch()
         row.addWidget(self.theme_combo)
         return row
 
     def _build_overview_page(self):
-        """Обзор: плитки с кольцами сверху (в разделе Processes скрыты) и таблица процессов."""
+        """Сводка Overview и общая таблица процессов."""
         page = QWidget()
         box = QVBoxLayout(page)
         box.setContentsMargins(0, 0, 0, 0)
-        box.setSpacing(12)
-        self.tiles = QWidget()
-        tiles = QVBoxLayout(self.tiles)
-        tiles.setContentsMargins(0, 0, 0, 0)
-        tiles.setSpacing(12)
-        tiles.addLayout(self._build_rings_row())
-        tiles.addLayout(self._build_cores_row())
-        box.addWidget(self.tiles)
+        box.setSpacing(8)
+        self.summary = QWidget()
+        summary = QVBoxLayout(self.summary)
+        summary.setContentsMargins(0, 0, 0, 0)
+        summary.setSpacing(10)
+        self.cpu_threads = system.cpu_count()
+        summary.addWidget(self._build_metrics())
+        summary.addWidget(self._build_cpu_threads())
+        summary.addWidget(self._build_sensors())
+        box.addWidget(self.summary)
         box.addWidget(self._build_process_panel(), 1)
         return page
 
-    def _build_rings_row(self):
-        has_gpu = bool(self.gpus)
-        row = QHBoxLayout()
-        row.setSpacing(12)
+    def _build_metrics(self):
+        section = make_section()
+        row = QHBoxLayout(section)
+        row.setContentsMargins(0, 12, 0, 6)
+        row.setSpacing(16)
+        self.cpu_metric = Metric("CPU")
+        self.mem_metric = Metric("MEMORY")
+        self.gpu_metric = Metric("GPU")
+        self.vram_metric = Metric("VRAM")
+        self.disk_metric = Metric("DISK /", last=True)
+        for metric in (self.cpu_metric, self.mem_metric, self.gpu_metric, self.vram_metric, self.disk_metric):
+            row.addWidget(metric, 1)
+        self.gpu_metric.hide()
+        self.vram_metric.hide()
+        return section
 
-        tile = make_card()
-        rings = QHBoxLayout(tile)
-        rings.setContentsMargins(16, 14, 16, 12)
-        self.cpu_ring = Ring("CPU", C.RING_SIZE)
-        self.mem_ring = Ring("Memory", C.RING_SIZE)
-        self.gpu_ring = Ring("GPU", C.RING_SIZE)
-        self.vram_ring = Ring("VRAM", C.RING_SIZE)
-        self.disk_ring = Ring("Disk /", C.RING_SIZE)
-        for ring in (self.cpu_ring, self.mem_ring, self.gpu_ring, self.vram_ring, self.disk_ring):
-            rings.addWidget(ring, 1, Qt.AlignmentFlag.AlignHCenter)
-        self.gpu_ring.setVisible(has_gpu)
-        self.vram_ring.setVisible(has_gpu)
-
-        temps = make_card()
-        temps_box = QVBoxLayout(temps)
-        temps_box.setContentsMargins(16, 14, 16, 12)
-        temp_row = QHBoxLayout()
-        self.cpu_temp_ring = Ring("CPU temp", C.TEMP_RING_SIZE, warm=True)
-        self.gpu_temp_ring = Ring("GPU temp", C.TEMP_RING_SIZE, warm=True)
-        self.gpu_temp_ring.setVisible(has_gpu)
-        temp_row.addWidget(self.cpu_temp_ring, 1, Qt.AlignmentFlag.AlignHCenter)
-        temp_row.addWidget(self.gpu_temp_ring, 1, Qt.AlignmentFlag.AlignHCenter)
-        self.fans_label = dim_label("")   # обороты вентиляторов платы, если Linux их видит
-        self.fans_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        temps_box.addLayout(temp_row)
-        temps_box.addWidget(self.fans_label)
-
-        row.addWidget(tile, 7)
-        row.addWidget(temps, 3)
-        return row
-
-    def _build_cores_row(self):
-        row = QHBoxLayout()
-        row.setSpacing(12)
-        n = system.cpu_count()
-
-        tile = make_card()
-        box = QVBoxLayout(tile)
-        box.setContentsMargins(18, 12, 18, 14)
-        box.setSpacing(10)
+    def _build_cpu_threads(self):
+        section = make_section()
+        box = QVBoxLayout(section)
+        box.setContentsMargins(0, 10, 0, 4)
+        box.setSpacing(7)
         head = QHBoxLayout()
-        title = QLabel(f"Cores · {n} threads")
+        title = QLabel("CPU threads")
         title.setObjectName("strong")
         self.load_label = dim_label("")
         head.addWidget(title)
+        head.addWidget(dim_label(f"{self.cpu_threads} logical CPUs"))
         head.addStretch()
         head.addWidget(self.load_label)
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(8)
-        cols = max(1, min(C.CORE_RING_COLUMNS, n))
-        self.core_rings = []
-        for i in range(n):
-            ring = Ring("", C.CORE_RING_SIZE, mini=True)
-            ring.setToolTip(f"Core {i}")
-            self.core_rings.append(ring)
-            grid.addWidget(ring, i // cols, i % cols, Qt.AlignmentFlag.AlignHCenter)
         box.addLayout(head)
-        box.addLayout(grid)
 
-        self.gpu_tile = make_card()
-        g = QGridLayout(self.gpu_tile)
-        g.setContentsMargins(18, 12, 18, 14)
-        g.setHorizontalSpacing(14)
-        g.setVerticalSpacing(8)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(2)
+        columns = max(1, min(C.CPU_THREAD_COLUMNS, self.cpu_threads))
+        self.core_meters = []
+        for i in range(self.cpu_threads):
+            meter = Meter(f"{i + 1:02}", lw=23, tw=30, compact=True)
+            meter.setToolTip(f"Logical CPU {i}")
+            self.core_meters.append(meter)
+            grid.addWidget(meter, i // columns, i % columns)
+        for column in range(columns):
+            grid.setColumnStretch(column, 1)
+        box.addLayout(grid)
+        return section
+
+    def _build_sensors(self):
+        self.sensor_section = make_section()
+        row = QHBoxLayout(self.sensor_section)
+        row.setContentsMargins(0, 8, 0, 4)
+        row.setSpacing(8)
+        self.gpu_summary = QWidget()
+        gpu = QHBoxLayout(self.gpu_summary)
+        gpu.setContentsMargins(0, 0, 0, 0)
+        gpu.setSpacing(8)
         self.gpu_name = QLabel("GPU")
         self.gpu_name.setObjectName("strong")
-        g.addWidget(self.gpu_name, 0, 0, 1, 2)
+        self.gpu_name.setTextFormat(Qt.TextFormat.PlainText)
+        self.gpu_name.setMaximumWidth(280)
+        gpu.addWidget(self.gpu_name, 2)
         self.gpu_stats = {}
-        for i, key in enumerate(("Core clock", "Memory clock", "Power", "Fan")):
-            cell = QVBoxLayout()
-            cell.setSpacing(1)
+        for key, caption in (("Core clock", "Core"), ("Memory clock", "Memory"),
+                             ("Power", "Power"), ("Fan", "GPU fan")):
             value = QLabel("—")
-            value.setObjectName("stat")
-            cell.addWidget(dim_label(key))
-            cell.addWidget(value)
-            g.addLayout(cell, 1 + i // 2, i % 2)
+            value.setObjectName("strong")
+            gpu.addWidget(dim_label(caption))
+            gpu.addWidget(value)
+            gpu.addStretch(1)
             self.gpu_stats[key] = value
-        g.setRowStretch(3, 1)
-        self.gpu_tile.setVisible(False)
 
-        row.addWidget(tile, 7)
-        row.addWidget(self.gpu_tile, 3)
-        return row
+        self.fans_label = dim_label("")
+        self.fans_label.hide()
+        row.addWidget(self.gpu_summary, 1)
+        row.addWidget(self.fans_label)
+        self.gpu_summary.hide()
+        self.sensor_section.hide()
+        return self.sensor_section
 
     def _build_process_panel(self):
-        """Карточка с панелью поиска и таблицей процессов."""
-        card = make_card()
-        box = QVBoxLayout(card)
-        box.setContentsMargins(14, 12, 14, 8)
+        panel = make_section()
+        box = QVBoxLayout(panel)
+        box.setContentsMargins(0, 8, 0, 0)
         box.setSpacing(8)
         box.addLayout(self._build_toolbar())
         box.addWidget(self._build_table(), 1)
-        return card
+        return panel
 
     def _build_gpu_page(self):
-        """Раздел GPU: подробные карточки каждой видеокарты (полосы загрузки, памяти, частот и т. д.)."""
+        """Раздел GPU: отдельная секция для каждой видеокарты (полосы загрузки, памяти, частот и т. д.)."""
         page = QWidget()
         box = QVBoxLayout(page)
         box.setContentsMargins(0, 0, 0, 0)
         box.setSpacing(12)
-        self.gpu_cards = {}
+        self.gpu_sections = {}
         self.gpu_layout = box
         self.gpu_empty = dim_label("Waiting for GPU data…")
         box.addWidget(self.gpu_empty)
@@ -346,9 +346,9 @@ class MainWindow(QWidget):
         page = QWidget()
         outer = QVBoxLayout(page)
         outer.setContentsMargins(0, 0, 0, 0)
-        card = make_card()
-        form = QGridLayout(card)
-        form.setContentsMargins(22, 18, 22, 18)
+        section = make_section()
+        form = QGridLayout(section)
+        form.setContentsMargins(0, 16, 0, 16)
         form.setHorizontalSpacing(18)
         form.setVerticalSpacing(14)
 
@@ -369,16 +369,17 @@ class MainWindow(QWidget):
         form.addWidget(dim_label("Colors and everything else"), 2, 0)
         form.addWidget(QLabel("Theme menu at the top right · ~/.local/share/archmon/archmon/config.py"), 2, 1)
         form.setColumnStretch(1, 1)
-        outer.addWidget(card)
+        outer.addWidget(section)
         outer.addStretch()
         return page
 
     def go_to(self, n):
         """Открыть раздел бокового меню номер n (по списку NAV_ITEMS)."""
-        label, page, tiles, _icon = NAV_ITEMS[n]
+        label, page, show_summary, _icon = NAV_ITEMS[n]
         self.nav_index = n
         self.pages.setCurrentIndex(page)
-        self.tiles.setVisible(tiles)
+        self.summary.setVisible(show_summary)
+        self.process_heading.setVisible(show_summary)
         self.page_title.setText(label)
         for i, button in self.nav_buttons:
             button.setChecked(i == n)
@@ -412,8 +413,6 @@ class MainWindow(QWidget):
         self.expand_button, self.collapse_button = QPushButton("Expand all"), QPushButton("Collapse all")
         self.expand_button.clicked.connect(self.expand_all)
         self.collapse_button.clicked.connect(self.collapse_all)
-        for button in (self.expand_button, self.collapse_button):
-            button.setVisible(self.tree_mode)   # нужны только в режиме дерева
 
         self.apps_button = QPushButton("Apps first")
         self.apps_button.setCheckable(True)
@@ -431,12 +430,28 @@ class MainWindow(QWidget):
 
         row = QHBoxLayout()
         row.setSpacing(8)
-        row.addWidget(self.search_box, 1)
-        row.addWidget(self.filter_box, 1)
-        for button in (self.apps_button, self.tree_button, self.expand_button, self.collapse_button,
-                       details_button, end_button, kill_button):
+        self.process_heading = QLabel("Processes")
+        self.process_heading.setObjectName("sectionTitle")
+        row.addWidget(self.process_heading)
+        row.addSpacing(6)
+        row.addWidget(self.search_box, 3)
+        row.addWidget(self.filter_box, 2)
+        for button in (self.apps_button, self.tree_button, details_button, end_button, kill_button):
             row.addWidget(button)
-        return row
+
+        self.tree_tools = QWidget()
+        tree_tools = QHBoxLayout(self.tree_tools)
+        tree_tools.setContentsMargins(0, 0, 0, 0)
+        tree_tools.addWidget(self.expand_button)
+        tree_tools.addWidget(self.collapse_button)
+        tree_tools.addStretch()
+        self.tree_tools.setVisible(self.tree_mode)
+
+        toolbar = QVBoxLayout()
+        toolbar.setSpacing(6)
+        toolbar.addLayout(row)
+        toolbar.addWidget(self.tree_tools)
+        return toolbar
 
     def _build_table(self):
         table = QTableWidget(0, len(COLUMNS))
@@ -444,6 +459,7 @@ class MainWindow(QWidget):
         table.verticalHeader().hide()
         table.verticalHeader().setDefaultSectionSize(C.TABLE_ROW_HEIGHT)
         table.setShowGrid(False)
+        table.setAlternatingRowColors(True)
         table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -469,7 +485,6 @@ class MainWindow(QWidget):
         table.viewport().installEventFilter(self)                          # ловим колесо и клики мыши
         table.verticalScrollBar().sliderPressed.connect(self._release_lock)  # и перетаскивание ползунка
         table.itemDoubleClicked.connect(lambda item: self.open_details(int(table.item(item.row(), PID_COL).text())))
-        table.setItemDelegateForColumn(CMD_COL, CommandDelegate(self))   # кружок с буквой программы
         self.table = table
         return table
 
@@ -542,34 +557,37 @@ class MainWindow(QWidget):
             self._update_tray(cpu, mem, gpus)
 
     def update_cpu(self):
-        """Кольца ядер и общее кольцо CPU; возвращает среднюю загрузку."""
+        """Шкалы потоков и сводка CPU; возвращает среднюю загрузку."""
         percents = system.cpu_percents()
-        for ring, percent in zip(self.core_rings, percents):
-            ring.set(percent, f"{percent:.0f}")
+        for meter, percent in zip(self.core_meters, percents):
+            meter.set(percent)
         avg = sum(percents) / len(percents) if percents else 0.0
-        self.cpu_ring.set(avg, f"{avg:.0f}%", "avg load")
+        self.cpu_metric.set(avg, f"{avg:.0f}%")
         return avg
 
     def update_system(self):
         """Память, нагрузка, температура процессора, вентиляторы, батарея. Возвращает % памяти."""
         mem, swap = system.memory(), system.swap()
-        self.mem_ring.set(mem.percent, human_bytes(mem.used), f"of {human_bytes(mem.total)}")
-        self.mem_ring.setToolTip(f"Swap: {human_bytes(swap.used)} / {human_bytes(swap.total)}")
+        self.mem_metric.set(mem.percent, human_bytes(mem.used, iec=True), f"of {human_bytes(mem.total, iec=True)}")
+        self.mem_metric.setToolTip(f"Swap: {human_bytes(swap.used)} / {human_bytes(swap.total)}")
 
         l1, l5, l15 = system.load_average()
-        self.load_label.setText(f"load {l1:.2f}")
+        self.load_label.setText(f"Load average  {l1:.2f}")
         self.load_label.setToolTip(f"1 / 5 / 15 min: {l1:.2f}  {l5:.2f}  {l15:.2f}")
 
         temp = system.cpu_temperature()
-        self.cpu_temp_ring.setVisible(temp is not None)
+        cpu_detail = f"{self.cpu_threads} threads"
         if temp is not None:
-            self.cpu_temp_ring.set(temp / C.TEMP_SCALE_MAX * 100, f"{temp:.0f}\u00b0")
+            cpu_detail += f" · {temp:.0f} °C"
+        self.cpu_metric.set_detail(cpu_detail)
 
         board_fans = [f for f in read_fans() if f.rpm]
         self.fans_label.setVisible(bool(board_fans))
         if board_fans:
-            self.fans_label.setText(f"Fans up to {max(f.rpm for f in board_fans):.0f} RPM")
+            self.fans_label.setText(f"Case fans  ·  up to {max(f.rpm for f in board_fans):.0f} RPM")
             self.fans_label.setToolTip("\n".join(f"{f.label}: {f.rpm:.0f} RPM" for f in board_fans))
+
+        self.sensor_section.setVisible(not self.gpu_summary.isHidden() or bool(board_fans))
 
         battery = system.battery()
         self._battery_text = f"bat {battery[0]:.0f}%" + (" AC" if battery[1] else "") if battery else ""
@@ -578,7 +596,7 @@ class MainWindow(QWidget):
         return mem.percent
 
     def update_gpus(self):
-        """Кольца и плитка первой видеокарты, карточки всех карт в разделе GPU. Возвращает список Gpu."""
+        """Сводка первой видеокарты и данные для раздела GPU. Возвращает список Gpu."""
         self.gpu_poller.request()
         self._show_gpus()
         return self.gpus
@@ -595,38 +613,37 @@ class MainWindow(QWidget):
     def _show_gpus(self):
         gpus = self.gpus
         for gpu in gpus:
-            if gpu.id not in self.gpu_cards:
-                card = GpuCard(f"GPU {len(self.gpu_cards)}")
-                self.gpu_cards[gpu.id] = card
-                self.gpu_layout.insertWidget(self.gpu_layout.count() - 1, card)
-            card = self.gpu_cards[gpu.id]
-            card.setToolTip("")
-            card.show_gpu(gpu)
+            if gpu.id not in self.gpu_sections:
+                section = GpuSection(f"GPU {len(self.gpu_sections)}")
+                self.gpu_sections[gpu.id] = section
+                self.gpu_layout.insertWidget(self.gpu_layout.count() - 1, section)
+            section = self.gpu_sections[gpu.id]
+            section.setToolTip("")
+            section.show_gpu(gpu)
         present = {g.id for g in gpus}
-        for gpu_id, card in self.gpu_cards.items():
+        for gpu_id, section in self.gpu_sections.items():
             if gpu_id not in present:
-                card.show_gpu(Gpu(gpu_id, "Data unavailable", 0, "—"))
-                card.setToolTip("GPU query failed or the device is unavailable. Retrying automatically.")
-        known = bool(self.gpu_cards)
+                section.show_gpu(Gpu(gpu_id, "Data unavailable", 0, "—"))
+                section.setToolTip("GPU query failed or the device is unavailable. Retrying automatically.")
+        known = bool(self.gpu_sections)
         self.gpu_empty.setVisible(not known)
         self.gpu_empty.setText("No GPU data yet. Retrying automatically.")
         for index, button in self.nav_buttons:
             if index == NAV_INDEX["GPU"]:
                 button.setVisible(known)
-        for widget in (self.gpu_ring, self.vram_ring, self.gpu_temp_ring, self.gpu_tile):
+        for widget in (self.gpu_metric, self.vram_metric, self.gpu_summary):
             widget.setVisible(known)
+        self.sensor_section.setVisible(known or not self.fans_label.isHidden())
         if gpus:
             g = gpus[0]
             self.gpu_name.setText(g.name)
-            self.gpu_ring.set(g.util, g.util_text, "load")
+            self.gpu_name.setToolTip(g.name)
+            gpu_detail = f"Temperature  {g.temp:.0f} °C" if g.temp is not None else "GPU load"
+            self.gpu_metric.set(g.util, g.util_text, gpu_detail)
             if g.vram_total and g.vram_used is not None:
-                self.vram_ring.set(g.vram_used / g.vram_total * 100, human_bytes(g.vram_used), f"of {human_bytes(g.vram_total)}")
+                self.vram_metric.set(g.vram_used / g.vram_total * 100, human_bytes(g.vram_used, iec=True), f"of {human_bytes(g.vram_total, iec=True)}")
             else:
-                self.vram_ring.set(0, "—", "unavailable")
-            if g.temp is not None:
-                self.gpu_temp_ring.set(g.temp / C.TEMP_SCALE_MAX * 100, f"{g.temp:.0f}\u00b0")
-            else:
-                self.gpu_temp_ring.set(0, "—", "unavailable")
+                self.vram_metric.set(0, "—", "unavailable")
             stats = {
                 "Core clock": f"{g.core_clk:.0f} MHz" if g.core_clk is not None else "—",
                 "Memory clock": f"{g.mem_clk:.0f} MHz" if g.mem_clk is not None else "—",
@@ -636,22 +653,22 @@ class MainWindow(QWidget):
             for key, value in stats.items():
                 self.gpu_stats[key].setText(value)
         elif known:
-            for ring in (self.gpu_ring, self.vram_ring, self.gpu_temp_ring):
-                ring.set(0, "—", "unavailable")
+            for metric in (self.gpu_metric, self.vram_metric):
+                metric.set(0, "—", "unavailable")
             for value in self.gpu_stats.values():
                 value.setText("—")
 
     def update_disks(self):
-        """Скорости всех дисков (нужны и главной, и разделу Disks) и кольцо заполненности «/»."""
+        """Скорости всех дисков (нужны и главной, и разделу Disks) и заполненность «/»."""
         rates = self.io.sample()
         usage = disks.root_usage()
         if usage is not None:
-            self.disk_ring.set(usage.percent, human_bytes(usage.used), f"of {human_bytes(usage.total)}")
+            self.disk_metric.set(usage.percent, human_bytes(usage.used, iec=True), f"of {human_bytes(usage.total, iec=True)}")
         # счётчики psutil включают и диски, и их разделы: берём только целые диски, чтобы не считать дважды
         whole = {d.name for d in disks.physical_disks()}
         read = sum(r.read for n, r in rates.items() if n in whole)
         write = sum(r.write for n, r in rates.items() if n in whole)
-        self.disk_ring.setToolTip(f"All disks: read {rate_text(read)} · write {rate_text(write)}")
+        self.disk_metric.setToolTip(f"All disks: read {rate_text(read)} · write {rate_text(write)}")
 
     def _update_info(self):
         self.info_label.setText(" · ".join(t for t in (self._uptime_text, self._tasks_text, self._battery_text) if t))
@@ -786,15 +803,14 @@ class MainWindow(QWidget):
         self.logo.setPixmap(logo_pixmap())
         for _i, button in self.nav_buttons:
             button.refresh()
-        for widget in [*self.findChildren(Meter), *self.findChildren(Ring)]:   # рисуются вручную: перерисовываем
-            widget.update()
+        for meter in self.findChildren(Meter):
+            meter.update()
         self.refresh_table()
 
     def set_tree_mode(self, on):
         self.tree_mode = on
         self.settings.setValue("tree", on)
-        self.expand_button.setVisible(on)
-        self.collapse_button.setVisible(on)
+        self.tree_tools.setVisible(on)
         self.refresh_table()
 
     # ── Раскрытие и сворачивание веток дерева ───────────────────────────────

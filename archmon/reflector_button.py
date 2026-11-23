@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QV
 
 from . import config as C
 from . import reflector
-from .widgets import dim_label, make_card
+from .widgets import dim_label, make_section
 
 
 class ReflectorButton(QPushButton):
@@ -84,9 +84,9 @@ class ReflectorPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(12)
 
-        card = make_card()
-        box = QVBoxLayout(card)
-        box.setContentsMargins(22, 18, 22, 18)
+        summary = make_section()
+        box = QVBoxLayout(summary)
+        box.setContentsMargins(0, 18, 0, 18)
         box.setSpacing(12)
         head = QHBoxLayout()
         title = QLabel("Pacman mirrors")
@@ -100,11 +100,11 @@ class ReflectorPage(QWidget):
         self.info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box.addLayout(head)
         box.addWidget(self.info)
-        root.addWidget(card)
+        root.addWidget(summary)
 
-        log_card = make_card()
-        log_box = QVBoxLayout(log_card)
-        log_box.setContentsMargins(22, 16, 22, 18)
+        log_section = make_section()
+        log_box = QVBoxLayout(log_section)
+        log_box.setContentsMargins(0, 16, 0, 18)
         log_box.addWidget(dim_label("Last run (reflector.service journal)"))
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
@@ -113,7 +113,7 @@ class ReflectorPage(QWidget):
         mono.setPointSize(C.TABLE_FONT_SIZE)
         self.log.setFont(mono)
         log_box.addWidget(self.log, 1)
-        root.addWidget(log_card, 1)
+        root.addWidget(log_section, 1)
 
     def _on_report(self, text):
         self.report(text)
